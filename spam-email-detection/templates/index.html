@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Spam Detection</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="compose-container">
+        <div class="compose-header">
+            <div class="compose-title">New Message</div>
+        </div>
+        
+        <div class="compose-body">
+            <div class="compose-field">
+                <label>Subject</label>
+                <input type="text" id="subject" placeholder="Subject">
+            </div>
+            
+            <div class="compose-editor">
+                <div class="formatting-toolbar">
+                    <button id="bold-button" onclick="toggleFormat('bold')">
+                        <span class="material-icons">format_bold</span>
+                    </button>
+                    <button id="italic-button" onclick="toggleFormat('italic')">
+                        <span class="material-icons">format_italic</span>
+                    </button>
+                    <button id="underline-button" onclick="toggleFormat('underline')">
+                        <span class="material-icons">format_underline</span>
+                    </button>
+                    
+                    <div class="separator"></div>
+                    
+                    <button onclick="document.execCommand('justifyLeft', false, null)">
+                        <span class="material-icons">format_align_left</span>
+                    </button>
+                    <button onclick="document.execCommand('justifyCenter', false, null)">
+                        <span class="material-icons">format_align_center</span>
+                    </button>
+                    <button onclick="document.execCommand('justifyRight', false, null)">
+                        <span class="material-icons">format_align_right</span>
+                    </button>
+                    
+                    <div class="separator"></div>
+                    
+                    <button onclick="document.execCommand('insertOrderedList', false, null)">
+                        <span class="material-icons">format_list_numbered</span>
+                    </button>
+                    <button onclick="document.execCommand('insertUnorderedList', false, null)">
+                        <span class="material-icons">format_list_bulleted</span>
+                    </button>
+                    
+                    <div class="separator"></div>
+                    
+                    <button onclick="document.execCommand('removeFormat', false, null)">
+                        <span class="material-icons">format_clear</span>
+                    </button>
+                </div>
+                
+                <div id="email-body" contenteditable="true" class="email-content"></div>
+            </div>
+        </div>
+        
+        <div class="compose-footer">
+            <button id="done-button" class="done-button">
+                Done
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal for displaying results -->
+    <div id="result-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Spam Detection Result</h2>
+                <span class="close-modal material-icons">close</span>
+            </div>
+            <div class="modal-body">
+                <div id="result-icon"></div>
+                <div id="result-message"></div>
+                <div id="confidence-level"></div>
+                <div class="email-preview">
+                    <h3>Email Content:</h3>
+                    <div id="email-preview-content"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="test-another" class="test-another-button">Test Another Email</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Overlay for modal background -->
+    <div id="overlay" class="overlay"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const emailBody = document.getElementById('email-body');
+            const doneButton = document.getElementById('done-button');
+            const resultModal = document.getElementById('result-modal');
+            const overlay = document.getElementById('overlay');
+            const closeModal = document.querySelector('.close-modal');
+            const testAnother = document.getElementById('test-another');
+            
+            // Track formatting state
+            const formattingState = {
+                bold: false,
+                italic: false,
+                underline: false
+            };
+            
+            // Function to toggle formatting
+            window.toggleFormat = function(command) {
+                document.execCommand(command, false, null);
+                
+                // Toggle state
+                formattingState[command] = !formattingState[command];
+                
+                // Update button appearance
+                const buttonId = command + '-button';
+                const button = document.getElementById(buttonId);
+                
+                if (formattingState[command]) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
+                
+                emailBody.focus();
+            };
+            
+            // Check formatting on selection change
+            emailBody.addEventListener('mouseup', checkFormatting);
+            emailBody.addEventListener('keyup', checkFormatting);
+            
+            function checkFormatting() {
+                // Check bold
+                formattingState.bold = document.queryCommandState('bold');
+                if (formattingState.bold) {
+                    document.getElementById('bold-button').classList.add('active');
+                } else {
+                    document.getElementById('bold-button').classList.remove('active');
+                }
+                
+                // Check italic
+                formattingState.italic = document.queryCommandState('italic');
+                if (formattingState.italic) {
+                    document.getElementById('italic-button').classList.add('active');
+                } else {
+                    document.getElementById('italic-button').classList.remove('active');
+                }
+                
+                // Check underline
+                formattingState.underline = document.queryCommandState('underline');
+                if (formattingState.underline) {
+                    document.getElementById('underline-button').classList.add('active');
+                } else {
+                    document.getElementById('underline-button').classList.remove('active');
+                }
+            }
+            
+            // Done button click event
+            doneButton.addEventListener('click', async function() {
+                const emailText = emailBody.innerText.trim();
+                
+                if (!emailText) {
+                    alert('Email is empty');
+                    return;
+                }
+                
+                // Show loading state
+                document.getElementById('result-message').innerHTML = '<div class="loading-spinner"></div><p>Analyzing...</p>';
+                document.getElementById('result-icon').innerHTML = '';
+                document.getElementById('confidence-level').textContent = '';
+                document.getElementById('email-preview-content').textContent = emailText;
+                
+                // Show modal and overlay
+                resultModal.style.display = 'block';
+                overlay.style.display = 'block';
+                
+                try {
+                    const response = await fetch('/predict', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ text: emailText }),
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Format the confidence as percentage
+                        const confidencePercent = (data.confidence * 100).toFixed(2);
+                        
+                        // Update the result
+                        if (data.is_spam) {
+                            document.getElementById('result-icon').innerHTML = '<span class="material-icons spam-icon">report_problem</span>';
+                            document.getElementById('result-message').innerHTML = '<h3 class="spam-result">SPAM DETECTED</h3>';
+                        } else {
+                            document.getElementById('result-icon').innerHTML = '<span class="material-icons ham-icon">check_circle</span>';
+                            document.getElementById('result-message').innerHTML = '<h3 class="ham-result">NOT SPAM</h3>';
+                        }
+                        
+                        document.getElementById('confidence-level').textContent = `Confidence: ${confidencePercent}%`;
+                    } else {
+                        document.getElementById('result-message').innerHTML = `<p class="error">Error: ${data.error || 'Unknown error occurred'}</p>`;
+                    }
+                } catch (error) {
+                    document.getElementById('result-message').innerHTML = '<p class="error">Error connecting to the server</p>';
+                    console.error('Error:', error);
+                }
+            });
+            
+            // Close modal events
+            closeModal.addEventListener('click', function() {
+                resultModal.style.display = 'none';
+                overlay.style.display = 'none';
+            });
+            
+            overlay.addEventListener('click', function() {
+                resultModal.style.display = 'none';
+                overlay.style.display = 'none';
+            });
+            
+            // Test another email button
+            testAnother.addEventListener('click', function() {
+                resultModal.style.display = 'none';
+                overlay.style.display = 'none';
+                emailBody.focus();
+            });
+        });
+    </script>
+</body>
+</html>
+
